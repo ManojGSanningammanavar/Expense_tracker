@@ -1,0 +1,27 @@
+[
+    {
+        "amount": 500.0,
+        "category": "Food",
+        "date": "2025-07-28"
+    },
+    {
+        "amount": 300.0,
+        "category": "Transport",
+        "date": "2025-07-28"
+    },
+    {
+        "amount": 120000.0,
+        "category": "Education",
+        "date": "2025-07-28"
+    },
+    {
+        "amount": 4000.0,
+        "category": "Groceries",
+        "date": "2025-07-28"
+    },
+    {
+        "amount": 3002.0,
+        "category": "Entertainment",
+        "date": "2025-07-28"
+    }
+]

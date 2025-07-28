@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta
+import os # Import os module for file operations
 
 # Try to import matplotlib for the bonus graphing feature.
 # If it's not installed, the graphing feature will be disabled.
@@ -11,8 +12,15 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-EXPENSE_FILE = "expenses.json"
-BUDGET_FILE = "budgets.json" # New: for budgeting feature
+# Base file names (these will be dynamically prefixed with the username)
+BASE_EXPENSE_FILE = "_expenses.json"
+BASE_BUDGET_FILE = "_budgets.json"
+USERS_FILE = "users.json" # To store the list of registered users
+
+# Global variables to hold the current user's file paths
+CURRENT_EXPENSE_FILE = ""
+CURRENT_BUDGET_FILE = ""
+CURRENT_USERNAME = None
 
 def load_data(filename):
     """Loads data from a JSON file. Returns empty dict/list if file doesn't exist or is invalid."""
@@ -21,10 +29,12 @@ def load_data(filename):
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         # Return appropriate empty structure based on file type
-        if filename == EXPENSE_FILE:
+        if BASE_EXPENSE_FILE in filename: # Check if it's an expense file
             return []
-        elif filename == BUDGET_FILE:
+        elif BASE_BUDGET_FILE in filename: # Check if it's a budget file
             return {}
+        elif filename == USERS_FILE: # Check if it's the users file
+            return [] # List of usernames
         return {} # Default fallback
 
 def save_data(data, filename):
@@ -98,7 +108,7 @@ def get_valid_category():
 def add_expense(expenses):
     """Prompts the user to add a new expense and adds it to the list."""
     print("\n--- ➕ Add a New Expense ---")
-    amount = get_valid_amount("Enter the amount: ₹") # Changed prompt here
+    amount = get_valid_amount("Enter the amount: ₹")
     category = get_valid_category()
     date = get_valid_date("Enter the date")
 
@@ -108,7 +118,7 @@ def add_expense(expenses):
         "date": date
     }
     expenses.append(new_expense)
-    print(f"🎉 Success! You've logged ₹{amount:.2f} for '{category}' on {date}.") # Changed here
+    print(f"🎉 Success! You've logged ₹{amount:.2f} for '{category}' on {date}.")
 
 def view_summary(expenses):
     """
@@ -121,7 +131,7 @@ def view_summary(expenses):
 
     print("\n--- 📊 Expense Summary ---")
     total_spending = sum(item['amount'] for item in expenses)
-    print(f"💰 Overall Total Spending: ₹{total_spending:.2f}") # Changed here
+    print(f"💰 Overall Total Spending: ₹{total_spending:.2f}")
 
     # Calculate spending by category
     category_spending = {}
@@ -134,7 +144,7 @@ def view_summary(expenses):
     # Sort categories by spending amount, descending
     sorted_categories = sorted(category_spending.items(), key=lambda item: item[1], reverse=True)
     for category, total in sorted_categories:
-        print(f"  - {category}: ₹{total:.2f}") # Changed here
+        print(f"  - {category}: ₹{total:.2f}")
 
     print("\n--- Detailed Summary Options ---")
     print("  1. View Monthly Spending")
@@ -176,7 +186,7 @@ def view_monthly_summary(expenses):
 
     print("\n--- Monthly Spending Overview ---")
     for month_year in sorted(monthly_spending.keys()):
-        print(f"  🗓️ {month_year}: ₹{monthly_spending[month_year]:.2f}") # Changed here
+        print(f"  🗓️ {month_year}: ₹{monthly_spending[month_year]:.2f}")
 
 def view_annual_summary(expenses):
     """Displays spending aggregated by year."""
@@ -191,7 +201,7 @@ def view_annual_summary(expenses):
 
     print("\n--- Annual Spending Overview ---")
     for year in sorted(annual_spending.keys()):
-        print(f"  📅 {year}: ₹{annual_spending[year]:.2f}") # Changed here
+        print(f"  📅 {year}: ₹{annual_spending[year]:.2f}")
 
 def view_all_expenses_detailed(expenses):
     """Lists all expenses with their details, sorted by date."""
@@ -203,7 +213,7 @@ def view_all_expenses_detailed(expenses):
     # Sort expenses by date for better readability
     sorted_expenses = sorted(expenses, key=lambda x: x['date'])
     for i, expense in enumerate(sorted_expenses):
-        print(f"  {i + 1}. Date: {expense['date']} | Category: {expense['category']} | Amount: ₹{expense['amount']:.2f}") # Changed here
+        print(f"  {i + 1}. Date: {expense['date']} | Category: {expense['category']} | Amount: ₹{expense['amount']:.2f}")
 
 
 def plot_expense_summary(category_spending):
@@ -220,9 +230,10 @@ def plot_expense_summary(category_spending):
     fig, ax = plt.subplots(figsize=(8, 8)) # Make chart a bit bigger
     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90,
             wedgeprops={"edgecolor": "white", 'linewidth': 1.5}, textprops={'fontsize': 10})
+    # Removing emoji from title to avoid font warnings
+    plt.title(f"Expense Distribution for {CURRENT_USERNAME}'s Categories", fontsize=16, pad=20) 
     ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
     
-    plt.title("Expense Distribution by Category 📊", fontsize=16, pad=20)
     plt.show()
 
 def manage_expenses(expenses):
@@ -239,7 +250,7 @@ def manage_expenses(expenses):
         # Sort expenses by date for easier management
         sorted_expenses = sorted(expenses, key=lambda x: x['date'], reverse=True)
         for i, expense in enumerate(sorted_expenses):
-            print(f"  {i + 1}. ₹{expense['amount']:.2f} - {expense['category']} ({expense['date']})") # Changed here
+            print(f"  {i + 1}. ₹{expense['amount']:.2f} - {expense['category']} ({expense['date']})")
             
         print("\nSelect an option:")
         print("  'E' to Edit an expense")
@@ -262,10 +273,10 @@ def manage_expenses(expenses):
                 original_idx = expenses.index(original_expense)
 
                 if choice == 'd':
-                    confirm = input(f"Are you sure you want to delete the expense: ₹{original_expense['amount']:.2f} - {original_expense['category']} ({original_expense['date']})? (y/n): ").lower() # Changed here
+                    confirm = input(f"Are you sure you want to delete the expense: ₹{original_expense['amount']:.2f} - {original_expense['category']} ({original_expense['date']})? (y/n): ").lower()
                     if confirm == 'y':
                         deleted_expense = expenses.pop(original_idx)
-                        print(f"🗑️ Expense of ₹{deleted_expense['amount']:.2f} in '{deleted_expense['category']}' deleted successfully.") # Changed here
+                        print(f"🗑️ Expense of ₹{deleted_expense['amount']:.2f} in '{deleted_expense['category']}' deleted successfully.")
                         # After deletion, it's good to re-display or exit to main menu
                         break 
                     else:
@@ -275,7 +286,7 @@ def manage_expenses(expenses):
                 elif choice == 'e':
                     print("\n✏️ Enter new details (leave blank to keep current value):")
                     
-                    new_amount_str = input(f"Enter new amount (current: ₹{expenses[original_idx]['amount']:.2f}): ") # Changed here
+                    new_amount_str = input(f"Enter new amount (current: ₹{expenses[original_idx]['amount']:.2f}): ")
                     if new_amount_str:
                         try:
                             new_amount = float(new_amount_str)
@@ -308,7 +319,7 @@ def set_budget(budgets):
     category = input("Enter the category to set a budget for (e.g., Food, Transport): ").strip().title()
     while True:
         try:
-            limit = float(input(f"Enter budget limit for '{category}': ₹")) # Changed here
+            limit = float(input(f"Enter budget limit for '{category}': ₹"))
             if limit < 0:
                 print("Budget limit cannot be negative.")
                 continue
@@ -317,12 +328,12 @@ def set_budget(budgets):
             print("Invalid amount. Please enter a number.")
     
     budgets[category] = limit
-    print(f"💰 Budget of ₹{limit:.2f} set for '{category}'.") # Changed here
+    print(f"💰 Budget of ₹{limit:.2f} set for '{category}'.")
 
 def check_budgets(expenses, budgets):
     """Checks current spending against set budgets."""
     if not budgets:
-        print("\nNo budgets set yet. Use option 5 to set one!")
+        print("\nNo budgets set yet. Use option 4 to set one!")
         return
     
     print("\n--- 📈 Budget vs. Spending Overview ---")
@@ -336,52 +347,247 @@ def check_budgets(expenses, budgets):
         remaining = limit - spent
         status = ""
         if remaining < 0:
-            status = f"🚨 OVER budget by ₹{abs(remaining):.2f}!" # Changed here
+            status = f"🚨 OVER budget by ₹{abs(remaining):.2f}!"
         elif remaining == 0:
             status = "🎯 Exactly on budget!"
         else:
-            status = f"✅ ₹{remaining:.2f} remaining." # Changed here
+            status = f"✅ ₹{remaining:.2f} remaining."
         
-        print(f"  {category}: Spent ₹{spent:.2f} / Budget ₹{limit:.2f} - {status}") # Changed here
+        print(f"  {category}: Spent ₹{spent:.2f} / Budget ₹{limit:.2f} - {status}")
+
+def reset_user_data(username):
+    """Deletes the expense and budget files for a given user."""
+    global CURRENT_EXPENSE_FILE, CURRENT_BUDGET_FILE
+    
+    expense_file_path = f"{username}{BASE_EXPENSE_FILE}"
+    budget_file_path = f"{username}{BASE_BUDGET_FILE}"
+
+    print(f"\n--- ⚠️ Resetting Data for {username} ---")
+    confirm = input(f"Are you absolutely sure you want to delete ALL expense and budget data for '{username}'? This cannot be undone! (type 'YES' to confirm): ")
+    
+    if confirm == 'YES':
+        try:
+            if os.path.exists(expense_file_path):
+                os.remove(expense_file_path)
+                print(f"🗑️ Deleted {expense_file_path}")
+            else:
+                print(f"No expense data found for '{username}' to delete.")
+
+            if os.path.exists(budget_file_path):
+                os.remove(budget_file_path)
+                print(f"🗑️ Deleted {budget_file_path}")
+            else:
+                print(f"No budget data found for '{username}' to delete.")
+
+            print(f"✅ All data for '{username}' has been reset.")
+            return True # Indicate successful reset
+        except Exception as e:
+            print(f"❌ Error resetting data: {e}")
+            return False
+    else:
+        print("Reset cancelled. Your data is safe.")
+        return False
+
+def delete_user_profile(users_list, username_to_delete):
+    """Deletes a user's data files and removes them from the users list."""
+    global CURRENT_USERNAME
+
+    print(f"\n--- ⚠️ Deleting User Profile: {username_to_delete} ---")
+    confirm = input(f"Are you absolutely sure you want to delete the user '{username_to_delete}' and ALL their data? This cannot be undone! (type 'DELETE USER' to confirm): ")
+
+    if confirm == 'DELETE USER':
+        # 1. Delete user's data files
+        expense_file_path = f"{username_to_delete}{BASE_EXPENSE_FILE}"
+        budget_file_path = f"{username_to_delete}{BASE_BUDGET_FILE}"
+
+        try:
+            if os.path.exists(expense_file_path):
+                os.remove(expense_file_path)
+                print(f"🗑️ Deleted {expense_file_path}")
+            if os.path.exists(budget_file_path):
+                os.remove(budget_file_path)
+                print(f"🗑️ Deleted {budget_file_path}")
+            
+            # 2. Remove user from the users list
+            if username_to_delete in users_list:
+                users_list.remove(username_to_delete)
+                save_data(users_list, USERS_FILE)
+                print(f"🗑️ User '{username_to_delete}' removed from user list.")
+                
+                # If the deleted user was the active one, log them out
+                if CURRENT_USERNAME == username_to_delete:
+                    CURRENT_USERNAME = None
+                    print("Current user logged out due to profile deletion.")
+
+                print(f"✅ User profile '{username_to_delete}' has been completely deleted.")
+                return True
+            else:
+                print(f"User '{username_to_delete}' not found in the user list.")
+                return False
+
+        except Exception as e:
+            print(f"❌ Error deleting user profile: {e}")
+            return False
+    else:
+        print("User profile deletion cancelled.")
+        return False
+
+
+def user_management_menu():
+    """Handles user selection, creation, and deletion."""
+    global CURRENT_EXPENSE_FILE, CURRENT_BUDGET_FILE, CURRENT_USERNAME
+
+    users = load_data(USERS_FILE)
+
+    while True:
+        print("\n--- 👤 User Management ---")
+        if users:
+            print("Existing Users:")
+            for i, user in enumerate(users):
+                print(f"  {i+1}. {user}")
+        else:
+            print("No users found. Let's create one!")
+
+        print("\nOptions:")
+        print("  1. Select an existing user")
+        print("  2. Create a new user")
+        print("  3. Delete a user profile (careful!)")
+        print("  4. Exit to main menu")
+
+        choice = input("Your choice: ").strip()
+
+        if choice == '1':
+            if not users:
+                print("No users to select. Please create a user first.")
+                continue
+            
+            while True:
+                user_choice = input("Enter the number of the user to select: ").strip()
+                if user_choice.isdigit():
+                    idx = int(user_choice) - 1
+                    if 0 <= idx < len(users):
+                        CURRENT_USERNAME = users[idx]
+                        CURRENT_EXPENSE_FILE = f"{CURRENT_USERNAME}{BASE_EXPENSE_FILE}"
+                        CURRENT_BUDGET_FILE = f"{CURRENT_USERNAME}{BASE_BUDGET_FILE}"
+                        print(f"🌟 Welcome back, {CURRENT_USERNAME}! Your financial journey continues.")
+                        return True # User selected, exit management menu
+                    else:
+                        print("Invalid user number. Please try again.")
+                else:
+                    print("Invalid input. Please enter a number.")
+
+        elif choice == '2':
+            while True:
+                new_username = input("Enter a new username (alphanumeric, no spaces): ").strip()
+                if not new_username.isalnum():
+                    print("Username must be alphanumeric (letters and numbers only). No spaces or special characters.")
+                elif new_username in users:
+                    print("This username already exists. Please choose a different one.")
+                else:
+                    users.append(new_username)
+                    save_data(users, USERS_FILE)
+                    CURRENT_USERNAME = new_username
+                    CURRENT_EXPENSE_FILE = f"{CURRENT_USERNAME}{BASE_EXPENSE_FILE}"
+                    CURRENT_BUDGET_FILE = f"{CURRENT_USERNAME}{BASE_BUDGET_FILE}"
+                    print(f"🎉 User '{new_username}' created and selected successfully!")
+                    return True # New user created and selected
+
+        elif choice == '3':
+            if not users:
+                print("No users to delete.")
+                continue
+            print("\n--- Users Available for Deletion ---")
+            for i, user in enumerate(users):
+                print(f"  {i+1}. {user}")
+            
+            while True:
+                user_to_delete_idx = input("Enter the number of the user to DELETE (or 'q' to cancel): ").strip().lower()
+                if user_to_delete_idx == 'q':
+                    print("User deletion cancelled.")
+                    break
+                elif user_to_delete_idx.isdigit():
+                    idx = int(user_to_delete_idx) - 1
+                    if 0 <= idx < len(users):
+                        username_to_delete = users[idx]
+                        delete_user_profile(users, username_to_delete)
+                        users = load_data(USERS_FILE) # Reload users list after deletion
+                        if not users: # If no users left, return to main loop to force user creation/selection
+                            return False 
+                        break # Exit inner loop, continue user management menu
+                    else:
+                        print("Invalid user number. Please try again.")
+                else:
+                    print("Invalid input.")
+
+        elif choice == '4':
+            return False # Exit user management menu to main loop
+
+        else:
+            print("Invalid choice. Please try again.")
 
 def main():
     """
     Main function to run the Personal Expense Tracker application.
     """
-    expenses = load_data(EXPENSE_FILE)
-    budgets = load_data(BUDGET_FILE) # Load budgets
+    global CURRENT_USERNAME, CURRENT_EXPENSE_FILE, CURRENT_BUDGET_FILE
 
     print("--- 👋 Welcome to your Personal Expense Tracker! ---")
-    while True:
-        print("\n🌟 --- Main Dashboard --- 🌟")
+
+    # Initial user selection/creation
+    if not user_management_menu():
+        print("Exiting application. Please select or create a user to proceed next time.")
+        return # Exit if user doesn't select/create a user
+
+    # Main application loop for the selected user
+    while CURRENT_USERNAME: # Loop continues as long as a user is logged in
+        expenses = load_data(CURRENT_EXPENSE_FILE)
+        budgets = load_data(CURRENT_BUDGET_FILE)
+
+        print(f"\n🌟 --- {CURRENT_USERNAME}'s Dashboard --- 🌟")
         print("What would you like to do today?")
         print("  1. ➕ Add a New Expense")
         print("  2. 📊 View Expense Summary")
         print("  3. 📝 Manage (Edit/Delete) Expenses")
         print("  4. 💰 Set Category Budget")
         print("  5. 📈 Check Budgets")
-        print("  6. 👋 Exit Application")
+        print("  6. 🧹 Reset My Data (Delete all my expenses/budgets)") # New option
+        print("  7. 🔄 Switch User / User Management") # New option
+        print("  8. 👋 Exit Application")
         
         choice = input("Please choose an option: ")
         
         if choice == '1':
             add_expense(expenses)
-            save_data(expenses, EXPENSE_FILE)
+            save_data(expenses, CURRENT_EXPENSE_FILE)
         elif choice == '2':
             view_summary(expenses)
         elif choice == '3':
             manage_expenses(expenses)
-            save_data(expenses, EXPENSE_FILE)
+            save_data(expenses, CURRENT_EXPENSE_FILE)
         elif choice == '4':
             set_budget(budgets)
-            save_data(budgets, BUDGET_FILE)
+            save_data(budgets, CURRENT_BUDGET_FILE)
         elif choice == '5':
             check_budgets(expenses, budgets)
         elif choice == '6':
-            print("Goodbye! Thanks for tracking your finances with us. See you next time! 😊")
+            if reset_user_data(CURRENT_USERNAME):
+                # If data reset successful, force reload of expenses/budgets for current user
+                expenses = [] # Clear in memory
+                budgets = {} # Clear in memory
+                print(f"You can now add new expenses for {CURRENT_USERNAME}.")
+            else:
+                print("Data reset failed or cancelled.")
+        elif choice == '7':
+            # This will return to the user management menu. If a user is selected, it will loop back here.
+            # If user chooses to exit user management, CURRENT_USERNAME might become None, breaking this loop.
+            if not user_management_menu():
+                print("Exiting application. Goodbye! 😊")
+                break # Exit the main application loop
+        elif choice == '8':
+            print(f"Goodbye, {CURRENT_USERNAME}! Thanks for tracking your finances with us. See you next time! 😊")
             break
         else:
-            print("🚫 Invalid choice. Please enter a number from 1 to 6.")
+            print("🚫 Invalid choice. Please enter a number from 1 to 8.")
 
 if __name__ == "__main__":
     main()
